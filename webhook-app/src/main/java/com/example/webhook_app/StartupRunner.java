@@ -48,7 +48,58 @@ public class StartupRunner implements CommandLineRunner {
 
                 // Step 7: Prepare second POST body with your SQL query
                 Map<String, String> solutionBody = new HashMap<>();
-                solutionBody.put("finalQuery", "YOUR_FINAL_SQL_QUERY_HERE");  // Paste your solved query here
+                String finalQuery = """
+                    WITH high_salary_payments AS ( 
+                        SELECT DISTINCT p.EMP_ID 
+                        FROM PAYMENTS p 
+                        WHERE p.AMOUNT > 70000 
+                    ), 
+                    qualified_employees AS ( 
+                        SELECT 
+                            d.DEPARTMENT_ID, 
+                            d.DEPARTMENT_NAME, 
+                            e.EMP_ID, 
+                            e.FIRST_NAME, 
+                            e.LAST_NAME, 
+                            e.DOB, 
+                            FLOOR(DATEDIFF('2025-12-01', e.DOB) / 365.25) AS AGE, 
+                            CONCAT(e.FIRST_NAME, ' ', e.LAST_NAME) AS FULL_NAME 
+                        FROM high_salary_payments h 
+                        JOIN EMPLOYEE e ON h.EMP_ID = e.EMP_ID 
+                        JOIN DEPARTMENT d ON e.DEPARTMENT = d.DEPARTMENT_ID 
+                    ), 
+                    dept_stats AS ( 
+                        SELECT 
+                            DEPARTMENT_ID, 
+                            DEPARTMENT_NAME, 
+                            AVG(AGE) AS AVERAGE_AGE, 
+                            COUNT(*) AS cnt 
+                        FROM qualified_employees 
+                        GROUP BY DEPARTMENT_ID, DEPARTMENT_NAME 
+                    ), 
+                    employee_lists AS ( 
+                        SELECT 
+                            DEPARTMENT_ID, 
+                            LISTAGG(FULL_NAME, ', ') WITHIN GROUP (ORDER BY FULL_NAME) AS raw_list 
+                        FROM ( 
+                            SELECT 
+                                DEPARTMENT_ID, 
+                                FULL_NAME, 
+                                ROW_NUMBER() OVER (PARTITION BY DEPARTMENT_ID ORDER BY FULL_NAME) AS rn 
+                            FROM qualified_employees 
+                        ) ranked 
+                        WHERE rn <= 10 
+                        GROUP BY DEPARTMENT_ID 
+                    ) 
+                    SELECT 
+                        ds.DEPARTMENT_NAME, 
+                        ROUND(ds.AVERAGE_AGE, 2) AS AVERAGE_AGE, 
+                        COALESCE(el.raw_list, '') AS EMPLOYEE_LIST 
+                    FROM dept_stats ds 
+                    LEFT JOIN employee_lists el ON ds.DEPARTMENT_ID = el.DEPARTMENT_ID 
+                    ORDER BY ds.DEPARTMENT_ID DESC;""";
+
+                solutionBody.put("finalQuery", finalQuery);
 
                 // Step 8: Set headers for second request (JWT and JSON)
                 HttpHeaders solutionHeaders = new HttpHeaders();
